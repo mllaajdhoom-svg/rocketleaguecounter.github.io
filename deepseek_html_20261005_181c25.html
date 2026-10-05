@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>Streak — Rocket League</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #141a2e;
+    --line: #26304d;
+    --ink: #e8ecf6;
+    --muted: #8b96b3;
+    --win: #35c46a;
+    --loss: #e6485c;
+    --accent: #4f8cff;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100dvh;
+    padding: 1.25rem;
+    gap: 1.25rem;
+    user-select: none;
+  }
+
+  h1 {
+    font-size: 1rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .streak-label {
+    font-size: .8rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .streak {
+    font-size: clamp(6rem, 38vw, 14rem);
+    font-weight: 800;
+    line-height: .9;
+    font-variant-numeric: tabular-nums;
+    transition: color .2s, transform .08s;
+    color: var(--accent);
+  }
+  .streak.zero { color: var(--muted); }
+  .streak.bump { transform: scale(1.06); }
+
+  .record {
+    display: flex;
+    gap: 2rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    font-size: .9rem;
+  }
+  .record b { color: var(--ink); font-weight: 600; }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .85rem;
+    width: 100%;
+    max-width: 30rem;
+  }
+
+  button {
+    font: inherit;
+    font-weight: 700;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.1rem 1rem;
+    cursor: pointer;
+    transition: transform .06s, border-color .15s, background .15s;
+  }
+  button:active { transform: scale(.97); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  #winBtn  { border-color: rgba(53,196,106,.45); }
+  #winBtn:hover  { border-color: var(--win); background: rgba(53,196,106,.08); }
+  #lossBtn { border-color: rgba(230,72,92,.45); }
+  #lossBtn:hover { border-color: var(--loss); background: rgba(230,72,92,.08); }
+
+  .big { font-size: 1.35rem; display: block; }
+  .sub { font-size: .75rem; color: var(--muted); font-weight: 500; letter-spacing: .08em; }
+
+  .secondary {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+    max-width: 30rem;
+  }
+  .secondary button {
+    flex: 1 1 0;
+    padding: .7rem .5rem;
+    font-size: .8rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: var(--muted);
+    border-radius: 10px;
+  }
+  .secondary button:hover { color: var(--ink); }
+
+  .best {
+    font-size: .85rem;
+    color: var(--muted);
+  }
+  .best b { color: var(--accent); }
+
+  .flash-win  { animation: flashWin .35s ease; }
+  .flash-loss { animation: flashLoss .35s ease; }
+  @keyframes flashWin  { 0% { background: rgba(53,196,106,.25); } 100% { background: var(--bg); } }
+  @keyframes flashLoss { 0% { background: rgba(230,72,92,.25); }  100% { background: var(--bg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+  <h1>Rocket League</h1>
+
+  <div style="text-align:center;">
+    <div class="streak-label">Current streak</div>
+    <div class="streak zero" id="streak">0</div>
+  </div>
+
+  <div class="record">
+    <span>Wins <b id="wins">0</b></span>
+    <span>Losses <b id="losses">0</b></span>
+    <span>Games <b id="games">0</b></span>
+  </div>
+
+  <div class="controls">
+    <button id="winBtn" type="button" aria-label="Record a win">
+      <span class="big">WIN</span>
+      <span class="sub">+1 streak</span>
+    </button>
+    <button id="lossBtn" type="button" aria-label="Record a loss">
+      <span class="big">LOSS</span>
+      <span class="sub">reset streak</span>
+    </button>
+  </div>
+
+  <div class="secondary">
+    <button id="undoBtn" type="button" title="Undo last action">UNDO</button>
+    <button id="resetBtn" type="button" title="Reset all stats">RESET</button>
+  </div>
+
+  <div class="best">Best streak this session: <b id="best">0</b></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const KEY = "rl.streak.v1";
+
+  const el = {
+    streak: document.getElementById("streak"),
+    wins:   document.getElementById("wins"),
+    losses: document.getElementById("losses"),
+    games:  document.getElementById("games"),
+    best:   document.getElementById("best"),
+    winBtn:   document.getElementById("winBtn"),
+    lossBtn:  document.getElementById("lossBtn"),
+    undoBtn:  document.getElementById("undoBtn"),
+    resetBtn: document.getElementById("resetBtn"),
+  };
+
+  const defaultState = () => ({
+    streak: 0,
+    wins: 0,
+    losses: 0,
+    best: 0,
+    history: [], // for undo: "w" | "l"
+  });
+
+  let state = load();
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return defaultState();
+      const parsed = JSON.parse(raw);
+      return { ...defaultState(), ...parsed };
+    } catch {
+      return defaultState();
+    }
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  }
+
+  function render() {
+    el.streak.textContent = state.streak;
+    el.streak.classList.toggle("zero", state.streak === 0);
+    el.wins.textContent   = state.wins;
+    el.losses.textContent = state.losses;
+    el.games.textContent  = state.wins + state.losses;
+    el.best.textContent   = state.best;
+    el.undoBtn.disabled   = state.history.length === 0;
+    el.undoBtn.style.opacity = state.history.length ? "1" : ".4";
+  }
+
+  function bump() {
+    el.streak.classList.add("bump");
+    setTimeout(() => el.streak.classList.remove("bump"), 90);
+  }
+
+  function flash(cls) {
+    document.body.classList.remove("flash-win", "flash-loss");
+    void document.body.offsetWidth; // reflow to restart animation
+    document.body.classList.add(cls);
+    setTimeout(() => document.body.classList.remove(cls), 360);
+  }
+
+  function recordWin() {
+    state.streak += 1;
+    state.wins   += 1;
+    if (state.streak > state.best) state.best = state.streak;
+    state.history.push("w");
+    save(); render(); bump(); flash("flash-win");
+  }
+
+  function recordLoss() {
+    state.streak = 0;
+    state.losses += 1;
+    state.history.push("l");
+    save(); render(); flash("flash-loss");
+  }
+
+  function undo() {
+    const last = state.history.pop();
+    if (!last) return;
+    if (last === "w") {
+      state.wins   -= 1;
+      state.streak -= 1;
+    } else {
+      state.losses -= 1;
+      // streak cannot be reliably restored without full replay; recompute from history
+    }
+    recomputeStreak();
+    save(); render();
+  }
+
+  function recomputeStreak() {
+    // Replay history to restore exact streak state after undo.
+    let s = 0, w = 0, l = 0, b = 0;
+    for (const h of state.history) {
+      if (h === "w") { s += 1; w += 1; if (s > b) b = s; }
+      else           { s = 0;  l += 1; }
+    }
+    state.streak = s; state.wins = w; state.losses = l; state.best = b;
+  }
+
+  function reset() {
+    if (!confirm("Reset streak and all stats?")) return;
+    state = defaultState();
+    save(); render();
+  }
+
+  el.winBtn.addEventListener("click", recordWin);
+  el.lossBtn.addEventListener("click", recordLoss);
+  el.undoBtn.addEventListener("click", undo);
+  el.resetBtn.addEventListener("click", reset);
+
+  // Keyboard shortcuts: W = win, L = loss, Z = undo
+  document.addEventListener("keydown", e => {
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "w") { e.preventDefault(); recordWin(); }
+    else if (k === "l") { e.preventDefault(); recordLoss(); }
+    else if (k === "z") { e.preventDefault(); undo(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
